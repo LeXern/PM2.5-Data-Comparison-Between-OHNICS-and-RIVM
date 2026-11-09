@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "PM2.5 Data Comparison Between OHNICS and RIVM: comparing a low-cost PM2.5 sensor with a RIVM reference station"
+authors:
+  - family-names: Ravi
+    given-names: Sachin
+    affiliation: "Faculty ITC, University of Twente"
+license: MIT
+date-released: 2026-11-10
