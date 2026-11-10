@@ -1,4 +1,4 @@
-# Tested with Python 3.13. Versions pinned so results can be reproduced exactly.
+# Tested with Python 3.12 (Windows) and 3.13 (Linux). Versions pinned so results can be reproduced exactly.
 numpy==2.5.3
 pandas==3.0.5
 matplotlib==3.11.2
