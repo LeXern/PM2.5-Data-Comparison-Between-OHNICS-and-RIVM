@@ -6,7 +6,7 @@ It was built for Ohnics sensors in Twente against the Enschede-Winkelshorst stat
 
 **What you need:** Python 3.12 or 3.13 (the versions it was tested with) and an internet connection. No login is needed except for the Ohnics dashboard. For a few weeks of data, each command below finishes within a minute.
 
-**Contents:** [Windows](#setup-on-windows) · [macOS and Linux](#setup-on-macos-and-linux) · [Data sources](#where-the-data-comes-from) · [Using it elsewhere](#using-it-elsewhere) · [How the comparison works](#how-the-comparison-works) · [Troubleshooting](#troubleshooting)
+**Contents:** [Windows](#setup-on-windows) · [macOS and Linux](#setup-on-macos-and-linux) · [Data sources](#where-the-data-comes-from) · [Which comparison to run](#which-comparison-to-run) · [Using it elsewhere](#using-it-elsewhere) · [How the comparison works](#how-the-comparison-works) · [Troubleshooting](#troubleshooting)
 
 ## Setup on Windows
 
@@ -112,6 +112,52 @@ python -m pm25colocation.colocation --sensor data\raw\ohnics_7d.csv --reference 
 ```
 
 `--days` sets both the period and the resolution: `1` gives 10-minute values for the last day, `7` or `14` hourly values, `30` 4-hourly values, and `90` or `360` daily values. The endpoint is undocumented and may change, so keep the CSV files you analyse.
+
+## Which comparison to run
+
+Each comparison answers a different question. Run the first one always; the others only when you need their answer. All examples use the Ohnics FieldLab tower sensor OHN_tw-4222 and 19–30 September 2026; replace the sensor, station and dates with your own.
+
+| # | Comparison | Question it answers | Run it when |
+|---|---|---|---|
+| 1 | Sensor's own values against the nearest station | How far off is the sensor, and does it follow the reference over time? | Always. This is the main co-location result. |
+| 2 | RIVM's calibrated values against the same station | Does RIVM's correction remove the sensor's error, so you could use the calibrated series instead of correcting the data yourself? | You are deciding which series to use. Compare its bias with comparison 1. |
+| 3 | Sensor's own values against a second, more distant station | Is the difference caused by the sensor or by the location? | The sensor stands far from the nearest station. |
+| 4 | Recent days from the Ohnics feed against the nearest station | Is the sensor working normally right now? | Before and after a field campaign, or to check whether a sensor has drifted. |
+| 5 | Your own CSV, such as a dashboard export, against the nearest station | How well do minute-level readings agree, or periods Samen Meten does not hold? | You have a login for the sensor's dashboard. |
+
+**How to read them together**
+
+- **1 vs 2:** if the bias hardly changes, RIVM's correction does not help for this sensor and period.
+- **1 vs 3:** a similar bias at both stations means the error comes from the sensor. A clearly different bias means location matters. R² is usually lower against the more distant station, because local events there differ.
+- **The same comparison at different times** (for example September and November) shows whether the error is stable. If it is not, a single correction factor will not hold.
+
+**Commands for each** (Windows; on macOS and Linux use `/` in the paths). Run them in this order, because a reference download for new dates replaces the previous one. Copy each report before the next comparison overwrites it.
+
+```
+:: 1. sensor's own values vs nearest station
+python -m pm25colocation.rivm --start 2026-09-19 --end 2026-10-01
+python -m pm25colocation.samenmeten --sensor OHN_tw-4222 --start 2026-09-19 --end 2026-10-01
+python -m pm25colocation.colocation --sensor data\raw\samenmeten_OHN_tw-4222_pm25.csv --reference data\raw\rivm_NL10821_PM25.csv --sensor-name OHN_tw-4222
+copy results\colocation_report.html report_1_raw.html
+
+:: 2. RIVM's calibrated values vs the same station
+python -m pm25colocation.samenmeten --sensor OHN_tw-4222 --start 2026-09-19 --end 2026-10-01 --calibrated
+python -m pm25colocation.colocation --sensor data\raw\samenmeten_OHN_tw-4222_pm25_kal.csv --reference data\raw\rivm_NL10821_PM25.csv --sensor-name "OHN_tw-4222 calibrated"
+copy results\colocation_report.html report_2_calibrated.html
+
+:: 3. same sensor vs a second station (NL10807, the regional station RIVM lists for this sensor)
+python -m pm25colocation.rivm --station NL10807 --start 2026-09-19 --end 2026-10-01
+python -m pm25colocation.colocation --sensor data\raw\samenmeten_OHN_tw-4222_pm25.csv --reference data\raw\rivm_NL10807_PM25.csv --sensor-name OHN_tw-4222 --lag -1
+copy results\colocation_report.html report_3_other_station.html
+
+:: 4. Ohnics feed, last 7 days (needs .env, see "Ohnics open feed"); set --start to 8 days ago and --end to tomorrow
+python -m pm25colocation.ohnics --days 7
+python -m pm25colocation.rivm --start 2026-11-02 --end 2026-11-11
+python -m pm25colocation.colocation --sensor data\raw\ohnics_7d.csv --reference data\raw\rivm_NL10821_PM25.csv --sensor-name Ohnics
+copy results\colocation_report.html report_4_ohnics.html
+```
+
+Lines starting with `::` are comments; Command Prompt ignores them. In comparison 3, `--lag -1` uses the same time offset as comparison 1. Against a distant station the automatic offset test is less reliable, because the two series agree less hour by hour. For comparison 5, see [Your own CSV](#your-own-csv).
 
 ## Using it elsewhere
 
