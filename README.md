@@ -88,6 +88,8 @@ The values from Samen Meten (`pm25`) and from the Ohnics feed are the sensor's o
 
 **Dates:** `--start` and `--end` are dates written as `YYYY-MM-DD`, in UTC. The end date is not included, so `--start 2026-09-19 --end 2026-10-01` covers 19 up to and including 30 September. The reference download must cover the same dates as the sensor download.
 
+**Files are replaced, not added to:** each download writes one file per station or sensor (for example `rivm_NL10821_PM25.csv`) and replaces any earlier file with that name. So after downloading the reference for other dates, download it again for the dates you want to compare before running the comparison.
+
 ### Ohnics open feed
 
 The feed needs the sensor's ID, which goes in a file called `.env` in the project folder. The ID is kept out of this repository because some sensors stand at private homes.
@@ -178,7 +180,8 @@ The reference values from the API are provisional until RIVM validates them. To 
 | `Set OHNICS_SENSOR_ID in your environment or in .env` | `.env` is missing or has another name. Run `dir /a` (Windows) or `ls -a` (macOS/Linux) in the project folder: the file must be listed as `.env`, not `.env.txt`. If it is `.env.txt`, run `ren .env.txt .env`. |
 | `No sensor called … on Samen Meten` | The name is misspelled. Copy it exactly from the portal, including capitals. |
 | `HTTPError: 400 Client Error` or `503` | The server had a short hiccup. The scripts already try each request up to four times; if it still fails, wait a minute and run the command again. |
-| `sensor and reference do not overlap in time` | The two files cover different dates. Download both for the same `--start` and `--end`. |
+| `The sensor and reference files cover different dates` | The reference file was downloaded for other dates, often because a later download replaced it. The message prints the dates of both files and the exact `rivm` command to run; run it and repeat the comparison. |
+| `The sensor file … does not exist` (or `reference file`) | The file name in the command does not match a downloaded file. The message lists the CSV files that are there; copy the right name, or run the download first. |
 | `reference periods … are for NL10821, not …` | Information only: the instrument split is skipped for other stations. See [Reference periods](#4-reference-periods). |
 
 ## Privacy

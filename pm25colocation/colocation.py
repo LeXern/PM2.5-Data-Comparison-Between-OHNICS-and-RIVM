@@ -129,8 +129,22 @@ def load_periods(path: Path | None, reference: pd.DataFrame | None = None) -> li
     return cfg['periods']
 
 
+def require_file(path: Path, kind: str) -> None:
+    """Stop with the files that do exist when the given one is missing."""
+    if path.exists():
+        return
+    folder = path.parent if str(path.parent) not in ('', '.') else Path('.')
+    found = sorted(f.name for f in folder.glob('*.csv')) if folder.exists() else []
+    hint = ('Download it first: the samenmeten, ohnics or rivm command prints the name of the file it writes.'
+            if kind == 'sensor' else 'Download it first with: python -m pm25colocation.rivm --station <code> --start <date> --end <date>')
+    raise SystemExit(f'The {kind} file {path} does not exist.\n'
+                     + (f'CSV files in {folder}: ' + ', '.join(found) if found else f'There are no CSV files in {folder}.')
+                     + f'\n{hint}')
+
+
 def read_sensor(path: Path, time_col: str = 'time', pm_col: str = 'pm25', tz: str = 'UTC') -> pd.DataFrame:
     """Read any sensor CSV and return columns time (UTC) and pm25. Times without a zone are taken as `tz`."""
+    require_file(path, 'sensor')
     df = pd.read_csv(path)
     missing = [c for c in (time_col, pm_col) if c not in df.columns]
     if missing:
@@ -147,7 +161,23 @@ def in_period(df: pd.DataFrame, period: dict) -> pd.DataFrame:
     return df[(df.index >= lo) & (df.index < hi)]
 
 
+def check_overlap(sensor: pd.DataFrame, ref: pd.DataFrame) -> None:
+    """Stop with a clear message when the two files cover different dates."""
+    s0, s1 = sensor['time'].min(), sensor['time'].max()
+    r0, r1 = ref['time'].min(), ref['time'].max()
+    if pd.isna(s0) or pd.isna(r0) or s1 + pd.Timedelta(hours=3) < r0 or r1 + pd.Timedelta(hours=3) < s0:
+        station = str(ref['station'].iloc[0]) if 'station' in ref and len(ref) else 'NL10821'
+        start, end = (s0.date(), (s1 + pd.Timedelta(days=1)).date()) if pd.notna(s0) else ('YYYY-MM-DD', 'YYYY-MM-DD')
+        raise SystemExit(
+            'The sensor and reference files cover different dates, so there is nothing to compare.\n'
+            f'  sensor file:    {s0:%Y-%m-%d %H:%M} to {s1:%Y-%m-%d %H:%M} UTC\n'
+            f'  reference file: {r0:%Y-%m-%d %H:%M} to {r1:%Y-%m-%d %H:%M} UTC\n'
+            'Download the reference for the sensor\'s dates, then run the comparison again:\n'
+            f'  python -m pm25colocation.rivm --station {station} --start {start} --end {end}')
+
+
 def analyse(sensor: pd.DataFrame, ref: pd.DataFrame, lag: str | int = 'auto', periods: list[dict] | None = None) -> dict:
+    check_overlap(sensor, ref)
     if lag == 'auto':
         lag_h, lag_table = best_lag(sensor, ref)
     else:
@@ -333,6 +363,7 @@ def main() -> None:
     a = ap.parse_args()
 
     sensor = read_sensor(a.sensor, a.time_col, a.pm_col, a.sensor_tz)
+    require_file(a.reference, 'reference')
     ref = pd.read_csv(a.reference)
     ref['time'] = pd.to_datetime(ref['time'], utc=True)
     periods = load_periods(a.periods, ref)

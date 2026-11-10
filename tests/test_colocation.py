@@ -79,3 +79,19 @@ def test_html_report_is_self_contained(tmp_path):
     assert 'Sensor &lt;A&gt;' in page and 'Sensor <A>' not in page
     assert 'src="http' not in page and '<link' not in page  # nothing loaded from elsewhere
     assert 'Bias (%)' in page and 'Orthogonal slope' in page
+
+
+def test_files_with_different_dates_give_a_clear_fix():
+    sensor, ref = _synthetic(hours=48)
+    ref = ref.assign(time=ref['time'] + pd.Timedelta(days=30), station='NL10821')
+    with pytest.raises(SystemExit) as e:
+        colocation.analyse(sensor, ref)
+    msg = str(e.value)
+    assert 'cover different dates' in msg and '--station NL10821 --start 2026-10-01 --end 2026-10-03' in msg
+
+
+def test_missing_file_lists_what_is_there(tmp_path):
+    (tmp_path / 'rivm_NL10821_PM25.csv').write_text('time,value\n')
+    with pytest.raises(SystemExit) as e:
+        colocation.read_sensor(tmp_path / 'samenmeten_X_pm25.csv')
+    assert 'does not exist' in str(e.value) and 'rivm_NL10821_PM25.csv' in str(e.value)
