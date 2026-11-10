@@ -161,7 +161,8 @@ def analyse(sensor: pd.DataFrame, ref: pd.DataFrame, lag: str | int = 'auto', pe
         rows.append({'period': 'all', 'resolution': res, **stats(p['ref'], p['sensor'])})
         for per in periods or []:
             q = in_period(p, per)
-            rows.append({'period': per['name'], 'resolution': res, **stats(q['ref'], q['sensor'])})
+            if len(q):  # leave out periods the data does not reach
+                rows.append({'period': per['name'], 'resolution': res, **stats(q['ref'], q['sensor'])})
     return {'lag_h': lag_h, 'lag_table': lag_table, 'pairs': sets, 'stats': pd.DataFrame(rows),
             'bands': ratio_by_band(base), 'negative_ref': int((ref['value'] < 0).sum())}
 
@@ -197,6 +198,9 @@ def plot(res: dict, figdir: Path, sensor_name: str, ref_name: str) -> list[Path]
     out = []
 
     name, p = next(iter(res['pairs'].items()))
+    step = p.index.to_series().diff().median()
+    if pd.notna(step):
+        p = p.asfreq(step)  # gaps become breaks in the lines instead of straight joins
     fig, ax = plt.subplots(figsize=(9, 3.2))
     ax.plot(p.index, p['ref'], color=c_ref, lw=1.2, label=ref_name)
     ax.plot(p.index, p['sensor'], color=c_sen, lw=1.2, label=sensor_name)
