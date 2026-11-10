@@ -1,7 +1,7 @@
 """Compare a low-cost sensor with a reference station over a co-location period.
 
-    python -m pm25colocation.colocation --sensor data/raw/ohnics_7d.csv --reference data/raw/rivm_NL10821_PM25.csv
-        [--periods config/reference_periods.json] [--lag auto|<hours>] [--out results] [--figures figures]
+    python -m pm25colocation.colocation --sensor data/raw/samenmeten_OHN_tw-4222_pm25.csv --reference data/raw/rivm_NL10821_PM25.csv
+        [--time-col time] [--pm-col pm25] [--sensor-tz UTC] [--periods config/reference_periods.json] [--lag auto|<hours>]
 
 Steps
 1. Bring the sensor to the reference time base. For sensor data at one hour or finer,
@@ -115,10 +115,30 @@ def aggregate(pairs: pd.DataFrame, freq: str, hours_per_bin: int) -> pd.DataFram
     return agg[agg['hours'] >= MIN_FRACTION * hours_per_bin].drop(columns='hours')
 
 
-def load_periods(path: Path | None) -> list[dict]:
-    if not path or not path.exists():
+def load_periods(path: Path | None, reference: pd.DataFrame | None = None) -> list[dict]:
+    """Reference-instrument periods, used only when they belong to the station in the reference file."""
+    if not path or str(path).lower() == 'none' or not path.exists():
         return []
-    return json.loads(path.read_text(encoding='utf-8'))['periods']
+    cfg = json.loads(path.read_text(encoding='utf-8'))
+    station = cfg.get('station')
+    if station and reference is not None and 'station' in reference:
+        found = set(reference['station'].dropna().astype(str))
+        if found and found != {station}:
+            print(f'reference periods in {path.name} are for {station}, not {", ".join(sorted(found))}: not applied')
+            return []
+    return cfg['periods']
+
+
+def read_sensor(path: Path, time_col: str = 'time', pm_col: str = 'pm25', tz: str = 'UTC') -> pd.DataFrame:
+    """Read any sensor CSV and return columns time (UTC) and pm25. Times without a zone are taken as `tz`."""
+    df = pd.read_csv(path)
+    missing = [c for c in (time_col, pm_col) if c not in df.columns]
+    if missing:
+        raise SystemExit(f'{path} has no column {missing}; columns are: {", ".join(df.columns)}')
+    t = pd.to_datetime(df[time_col])
+    t = t.dt.tz_localize(tz) if t.dt.tz is None else t
+    return pd.DataFrame({'time': t.dt.tz_convert('UTC'), 'pm25': pd.to_numeric(df[pm_col], errors='coerce')}) \
+        .dropna().drop_duplicates('time').sort_values('time').reset_index(drop=True)
 
 
 def in_period(df: pd.DataFrame, period: dict) -> pd.DataFrame:
@@ -223,22 +243,24 @@ def plot(res: dict, figdir: Path, sensor_name: str, ref_name: str) -> list[Path]
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument('--sensor', type=Path, required=True, help='CSV from pm25colocation.ohnics (time, pm25, ...)')
-    ap.add_argument('--reference', type=Path, required=True, help='CSV from pm25colocation.rivm (time, value, ...)')
+    ap.add_argument('--sensor', type=Path, required=True, help='sensor CSV (from samenmeten, ohnics, or your own)')
+    ap.add_argument('--reference', type=Path, required=True, help='CSV from pm25colocation.rivm (time, value, station)')
+    ap.add_argument('--time-col', default='time', help='name of the time column in the sensor CSV')
+    ap.add_argument('--pm-col', default='pm25', help='name of the PM2.5 column in the sensor CSV')
+    ap.add_argument('--sensor-tz', default='UTC', help='time zone of sensor times that carry none, e.g. Europe/Amsterdam')
     ap.add_argument('--periods', type=Path, default=ROOT / 'config' / 'reference_periods.json',
                     help="JSON with reference-instrument periods, or 'none'")
     ap.add_argument('--lag', default='auto', help="'auto' or whole hours to shift the sensor")
-    ap.add_argument('--sensor-name', default='Ohnics')
+    ap.add_argument('--sensor-name', default='Sensor')
     ap.add_argument('--ref-name', default='RIVM')
     ap.add_argument('--out', type=Path, default=ROOT / 'results')
     ap.add_argument('--figures', type=Path, default=ROOT / 'figures')
     a = ap.parse_args()
 
-    sensor = pd.read_csv(a.sensor, parse_dates=['time'])
-    ref = pd.read_csv(a.reference, parse_dates=['time'])
-    for df in (sensor, ref):
-        df['time'] = pd.to_datetime(df['time'], utc=True)
-    periods = [] if str(a.periods).lower() == 'none' else load_periods(a.periods)
+    sensor = read_sensor(a.sensor, a.time_col, a.pm_col, a.sensor_tz)
+    ref = pd.read_csv(a.reference)
+    ref['time'] = pd.to_datetime(ref['time'], utc=True)
+    periods = load_periods(a.periods, ref)
     res = analyse(sensor, ref, a.lag if a.lag == 'auto' else int(a.lag), periods)
     a.out.mkdir(parents=True, exist_ok=True)
     res['stats'].to_csv(a.out / 'colocation_stats.csv', index=False)

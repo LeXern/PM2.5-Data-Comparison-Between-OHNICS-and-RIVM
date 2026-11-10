@@ -1,7 +1,16 @@
 {
-  "_comment": "Reference instrument at Enschede-Winkelshorst (NL10821), as seen in RIVM's September 2026 data. 18 September is left out because the switch happened that day.",
+  "_comment": "Reference instrument at Enschede-Winkelshorst (NL10821), as seen in RIVM's September 2026 data. 18 September is left out because the switch happened that day. Applied only when the reference file is from this station.",
+  "station": "NL10821",
   "periods": [
-    {"name": "BAM-1020", "start": "2026-09-01", "end": "2026-09-18"},
-    {"name": "Fidas 200", "start": "2026-09-19", "end": "2027-01-01"}
+    {
+      "name": "BAM-1020",
+      "start": "2026-09-01",
+      "end": "2026-09-18"
+    },
+    {
+      "name": "Fidas 200",
+      "start": "2026-09-19",
+      "end": "2027-01-01"
+    }
   ]
 }

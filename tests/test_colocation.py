@@ -47,3 +47,22 @@ def test_periods_split_the_statistics():
                {'name': 'B', 'start': '2026-10-08', 'end': '2026-10-20'}]
     st = colocation.analyse(sensor, ref, periods=periods)['stats']
     assert set(st['period']) == {'all', 'A', 'B'}
+
+
+def test_read_sensor_accepts_other_columns_and_local_time(tmp_path):
+    f = tmp_path / 'export.csv'
+    f.write_text('Timestamp,PM2.5 (ug/m3)\n2026-11-08 10:00:00,5.0\n2026-11-08 10:01:00,6.0\n')
+    df = colocation.read_sensor(f, 'Timestamp', 'PM2.5 (ug/m3)', 'Europe/Amsterdam')
+    assert df['time'].iloc[0] == pd.Timestamp('2026-11-08T09:00:00Z') and list(df['pm25']) == [5.0, 6.0]
+    with pytest.raises(SystemExit):
+        colocation.read_sensor(f, 'time', 'pm25')
+
+
+def test_reference_periods_only_for_their_station(tmp_path):
+    p = tmp_path / 'periods.json'
+    p.write_text('{"station": "NL10821", "periods": [{"name": "A", "start": "2026-01-01", "end": "2027-01-01"}]}')
+    same = pd.DataFrame({'station': ['NL10821']})
+    other = pd.DataFrame({'station': ['NL01908']})
+    assert len(colocation.load_periods(p, same)) == 1
+    assert colocation.load_periods(p, other) == []
+    assert colocation.load_periods(Path('none')) == []
