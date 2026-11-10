@@ -184,6 +184,77 @@ def write_summary(res: dict, path: Path, sensor_name: str, ref_name: str) -> Non
     path.write_text('\n'.join(lines), encoding='utf-8')
 
 
+STAT_LABELS = {
+    'period': 'Period', 'resolution': 'Resolution', 'n': 'Pairs', 'ref_mean': 'Reference mean',
+    'sensor_mean': 'Sensor mean', 'bias': 'Bias', 'rel_bias_pct': 'Bias (%)', 'rmse': 'RMSE', 'mae': 'MAE',
+    'r2': 'R²', 'ols_slope': 'OLS slope', 'ols_intercept': 'OLS intercept',
+    'orth_slope': 'Orthogonal slope', 'orth_intercept': 'Orthogonal intercept'}
+
+REPORT_CSS = """
+:root { --bg:#f7f9f9; --card:#ffffff; --ink:#17262a; --muted:#56676c; --line:#d5dddc; --accent:#2160a6; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0f171a; --card:#172226; --ink:#e1e9ea; --muted:#93a4a8; --line:#2c3c41; --accent:#6ba7ec; color-scheme: dark; } }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
+main { max-width:1100px; margin:0 auto; padding:28px 18px 48px; }
+h1 { font-size:26px; margin:0 0 4px; } h2 { font-size:18px; margin:28px 0 8px; }
+.meta { color:var(--muted); margin:0 0 6px; } .note { color:var(--muted); font-size:14px; max-width:75ch; }
+.scroll.narrow { display:inline-block; max-width:100%; }
+.scroll { overflow-x:auto; background:var(--card); border:1px solid var(--line); border-radius:6px; }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; font-size:14px; }
+th, td { padding:6px 10px; border-bottom:1px solid var(--line); text-align:right; white-space:nowrap; }
+th { color:var(--muted); font-weight:600; background:var(--card); }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align:left; }
+img { width:100%; height:auto; background:#fff; border:1px solid var(--line); border-radius:6px; display:block; margin:8px 0; }
+"""
+
+
+def write_report_html(res: dict, path: Path, sensor_name: str, ref_name: str, figures: list[Path]) -> None:
+    """One self-contained page with the tables and charts; opens in any web browser."""
+    import base64
+    import datetime as dt
+    import html
+
+    def table(df: pd.DataFrame, labels: dict | None = None, narrow: bool = False) -> str:
+        df = df.rename(columns=labels or {})
+        body = df.to_html(index=False, border=0, na_rep='–', float_format=lambda v: f'{v:.2f}', escape=True)
+        return f'<div class="scroll{" narrow" if narrow else ""}">{body}</div>'
+
+    first = next(iter(res['pairs'].values()))
+    span = f'{first.index.min():%d %b %Y %H:%M} to {first.index.max():%d %b %Y %H:%M} UTC' if len(first) else 'no overlap'
+    def img(f: Path) -> str:
+        data = f.read_bytes()
+        width = int.from_bytes(data[16:20], 'big') * 100 // 160  # PNG width at 160 dpi -> CSS px at 100 per inch
+        return (f'<img alt="{html.escape(f.stem.replace("_", " "))}" style="max-width:min(100%, {width}px)" '
+                f'src="data:image/png;base64,{base64.b64encode(data).decode()}">')
+
+    imgs = ''.join(img(f) for f in figures)
+    lag = '' if res['lag_table'] is None else (
+        '<h2>Time-offset test</h2><p class="note">R² for each whole-hour shift of the sensor; the highest was applied.</p>'
+        + table(res['lag_table'][['lag_h', 'n', 'r2', 'bias']], {'lag_h': 'Offset (h)', 'n': 'Pairs', 'r2': 'R²', 'bias': 'Bias'}, narrow=True))
+    title = f'Co-location: {sensor_name} vs {ref_name}'
+    page = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(title)}</title><style>{REPORT_CSS}</style></head>
+<body><main>
+<h1>{html.escape(title)}</h1>
+<p class="meta">Data from {span} · time offset applied to the sensor: {res['lag_h']:+d} h ·
+negative reference values: {res['negative_ref']} · generated {dt.date.today():%d %b %Y}</p>
+<h2>Agreement</h2>
+<p class="note">Concentrations in µg/m³. Bias is sensor minus reference, so a negative bias means the sensor reads low.
+R² is the share of the reference's variation that the sensor follows (1 = perfectly). The regressions describe the sensor
+as slope × reference + intercept.</p>
+{table(res['stats'], STAT_LABELS)}
+<h2>Charts</h2>
+<p class="note">The dashed line in the scatter plots is perfect agreement (1:1); the solid line is the fitted regression.</p>
+{imgs}
+<h2>Sensor/reference ratio by concentration</h2>
+<p class="note">Median of sensor ÷ reference within each band of reference concentration (µg/m³). 1.00 means no bias.</p>
+{table(res['bands'], {'band': 'Band', 'n': 'Pairs', 'median_ratio': 'Median ratio'}, narrow=True)}
+{lag}
+</main></body></html>
+"""
+    path.write_text(page, encoding='utf-8')
+
+
 def plot(res: dict, figdir: Path, sensor_name: str, ref_name: str) -> list[Path]:
     import matplotlib
     matplotlib.use('Agg')
@@ -270,8 +341,11 @@ def main() -> None:
     res['stats'].to_csv(a.out / 'colocation_stats.csv', index=False)
     write_summary(res, a.out / 'colocation_summary.md', a.sensor_name, a.ref_name)
     figs = plot(res, a.figures, a.sensor_name, a.ref_name)
-    print(f'lag {res["lag_h"]:+d} h; wrote {a.out / "colocation_stats.csv"}, {a.out / "colocation_summary.md"}, '
-          + ', '.join(str(f) for f in figs))
+    report = a.out / 'colocation_report.html'
+    write_report_html(res, report, a.sensor_name, a.ref_name, figs)
+    print(f'lag {res["lag_h"]:+d} h')
+    print(f'report (open in a web browser): {report}')
+    print('also wrote: ' + ', '.join(str(f) for f in [a.out / 'colocation_summary.md', a.out / 'colocation_stats.csv', *figs]))
 
 
 if __name__ == '__main__':

@@ -46,13 +46,14 @@ python -m pm25colocation.samenmeten --sensor OHN_tw-4222 --start 2026-09-19 --en
 python -m pm25colocation.colocation --sensor data\raw\samenmeten_OHN_tw-4222_pm25.csv --reference data\raw\rivm_NL10821_PM25.csv --sensor-name OHN_tw-4222
 ```
 
-The last command prints `lag -1 h` and writes:
+The last command prints `lag -1 h` and the location of the report. It writes:
 
-- `results\colocation_summary.md`: the tables with bias, RMSE, R² and regression. Open it in any text editor, or in VS Code for a formatted view.
-- `results\colocation_stats.csv`: the same numbers for Excel.
-- `figures\colocation_timeseries.png`, `figures\colocation_scatter.png` and `figures\colocation_ratio_by_concentration.png`: the charts.
+- **`results\colocation_report.html`: start here.** One page with all tables and charts and a short explanation of each. Double-click it in File Explorer and it opens in your web browser. No other software is needed.
+- `results\colocation_stats.csv`: the numbers as a spreadsheet, for further work. It opens in Excel, LibreOffice Calc or Google Sheets (File → Import); without one of those, it opens as plain text.
+- `results\colocation_summary.md`: the same tables as plain text in Markdown. Notepad shows it with the table markup visible; editors such as VS Code can show it formatted. You do not need this file if you use the report.
+- `figures\colocation_timeseries.png`, `figures\colocation_scatter.png` and `figures\colocation_ratio_by_concentration.png`: the charts as separate images, for slides or documents. They open in any image viewer.
 
-For this example the summary should show a bias of about −1.6 µg/m³ and R² of 0.85 (hourly), 0.88 (4-hourly) and 0.96 (daily).
+For this example the report should show a bias of about −1.6 µg/m³ and R² of 0.85 (hourly), 0.88 (4-hourly) and 0.96 (daily).
 
 **Every later session:** open Command Prompt, run the `cd` line from step 3, then `.venv\Scripts\activate`. Steps 1–3 only need doing once.
 
@@ -70,7 +71,7 @@ make test
 make colocation SENSOR=OHN_tw-4222 STATION=NL10821 START=2026-09-19 END=2026-10-01
 ```
 
-`make colocation` runs the three commands from Windows step 4 in one go. The other `make` targets are listed in the [Makefile](Makefile): `info`, `reference`, `sensor`, `ohnics` and `analysis`. Each takes the settings `SENSOR`, `STATION`, `START`, `END` and `DAYS`. Without `START` and `END`, the last 14 days are used. Every `make` target is a shortcut for one of the `python -m …` commands shown in this README, so those work on macOS and Linux too.
+`make colocation` runs the three commands from Windows step 4 in one go. Open `results/colocation_report.html` in a browser to see the results. The other `make` targets are listed in the [Makefile](Makefile): `info`, `reference`, `sensor`, `ohnics` and `analysis`. Each takes the settings `SENSOR`, `STATION`, `START`, `END` and `DAYS`. Without `START` and `END`, the last 14 days are used. Every `make` target is a shortcut for one of the `python -m …` commands shown in this README, so those work on macOS and Linux too.
 
 ## Where the data comes from
 
@@ -138,7 +139,7 @@ python -m pm25colocation.colocation --sensor data\raw\samenmeten_OHN_tw-4222_pm2
 
 The download commands print the name of the file they wrote; use those names in the last command. On macOS and Linux, write the paths with `/` instead of `\`, or use `make colocation SENSOR=… STATION=… START=… END=…`.
 
-Each run overwrites the files in `results` and `figures`. To keep a run, copy those two folders somewhere else first.
+Each run overwrites the files in `results` and `figures`. To keep a run, copy those two folders somewhere else first. The HTML report contains its charts, so copying `colocation_report.html` alone is enough to keep the full result.
 
 ### 4. Reference periods
 
@@ -191,7 +192,7 @@ config/reference_periods.json   instrument periods at NL10821
 pm25colocation/rivm.py          Luchtmeetnet reference download
 pm25colocation/samenmeten.py    Samen Meten sensor download and sensor info
 pm25colocation/ohnics.py        Ohnics open-feed download
-pm25colocation/colocation.py    alignment, statistics, summary and charts
+pm25colocation/colocation.py    alignment, statistics, charts, HTML report and summary
 pm25colocation/_http.py         retries for the downloads
 tests/                          automated tests, with small API samples in tests/fixtures/
 ```

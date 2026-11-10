@@ -66,3 +66,16 @@ def test_reference_periods_only_for_their_station(tmp_path):
     assert len(colocation.load_periods(p, same)) == 1
     assert colocation.load_periods(p, other) == []
     assert colocation.load_periods(Path('none')) == []
+
+
+def test_html_report_is_self_contained(tmp_path):
+    sensor, ref = _synthetic(hours=24 * 4)
+    res = colocation.analyse(sensor, ref)
+    figs = colocation.plot(res, tmp_path / 'fig', 'Sensor <A>', 'RIVM')
+    out = tmp_path / 'report.html'
+    colocation.write_report_html(res, out, 'Sensor <A>', 'RIVM', figs)
+    page = out.read_text(encoding='utf-8')
+    assert page.count('data:image/png;base64,') == 3
+    assert 'Sensor &lt;A&gt;' in page and 'Sensor <A>' not in page
+    assert 'src="http' not in page and '<link' not in page  # nothing loaded from elsewhere
+    assert 'Bias (%)' in page and 'Orthogonal slope' in page
