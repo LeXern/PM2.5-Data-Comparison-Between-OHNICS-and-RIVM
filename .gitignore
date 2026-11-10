@@ -3,5 +3,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.pyc
-# Ohnics downloads stay local until the sensor's owner agrees to publish them
+# Sensor downloads stay local: some sensors stand at private homes, so publish their data only with the owner's consent.
 data/raw/ohnics_*.csv
+data/raw/samenmeten_*.csv
