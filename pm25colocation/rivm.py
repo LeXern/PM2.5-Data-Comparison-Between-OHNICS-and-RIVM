@@ -16,6 +16,8 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+from ._http import get_json
+
 ROOT = Path(__file__).resolve().parent.parent
 API = 'https://api.luchtmeetnet.nl/open_api/measurements'
 CHUNK_DAYS = 7  # the API serves at most a week per request
@@ -38,11 +40,9 @@ def fetch(station: str, formula: str, start: dt.datetime, end: dt.datetime,
         t1 = min(t0 + dt.timedelta(days=CHUNK_DAYS), end)
         page = 1
         while True:
-            r = s.get(API, params={'station_number': station, 'formula': formula,
+            payload = get_json(s, API, {'station_number': station, 'formula': formula,
                                    'start': t0.strftime('%Y-%m-%dT%H:%M:%SZ'), 'end': t1.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                                   'page': page, 'order_by': 'timestamp_measured', 'order_direction': 'asc'}, timeout=60)
-            r.raise_for_status()
-            payload = r.json()
+                                   'page': page, 'order_by': 'timestamp_measured', 'order_direction': 'asc'})
             parts.append(parse(payload))
             if page >= payload.get('pagination', {}).get('last_page', 1):
                 break

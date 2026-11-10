@@ -21,6 +21,8 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+from ._http import get_json
+
 ROOT = Path(__file__).resolve().parent.parent
 API = 'https://api-samenmeten.rivm.nl/v1.0'
 PAGE = 1000
@@ -28,9 +30,8 @@ PAGE = 1000
 
 def find_thing(name: str, session: requests.Session | None = None) -> dict:
     s = session or requests.Session()
-    r = s.get(f'{API}/Things', params={'$filter': f"name eq '{name}'", '$expand': 'Datastreams,Locations'}, timeout=60)
-    r.raise_for_status()
-    things = r.json().get('value', [])
+    payload = get_json(s, f'{API}/Things', {'$filter': f"name eq '{name}'", '$expand': 'Datastreams,Locations'})
+    things = payload.get('value', [])
     if not things:
         raise SystemExit(f'No sensor called {name!r} on Samen Meten. Check the name on samenmeten.rivm.nl/dataportaal.')
     return things[0]
@@ -61,9 +62,7 @@ def fetch(ds_id: int, start: dt.datetime, end: dt.datetime, session: requests.Se
               '$orderby': 'phenomenonTime asc', '$top': PAGE, '$select': 'phenomenonTime,result'}
     parts = []
     while url:
-        r = s.get(url, params=params, timeout=60)
-        r.raise_for_status()
-        payload = r.json()
+        payload = get_json(s, url, params)
         parts.append(parse(payload))
         url, params = payload.get('@iot.nextLink'), None  # the next link carries its own query
         if url:

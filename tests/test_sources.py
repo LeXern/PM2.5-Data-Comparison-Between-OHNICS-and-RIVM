@@ -5,7 +5,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pm25colocation import ohnics, rivm, samenmeten
+import requests
+
+from pm25colocation import _http, ohnics, rivm, samenmeten
 
 FIX = Path(__file__).resolve().parent / 'fixtures'
 
@@ -44,3 +46,38 @@ def test_samenmeten_parser():
     df = samenmeten.parse(json.loads((FIX / 'samenmeten_observations.json').read_text()))
     assert list(df.columns) == ['time', 'pm25'] and list(df['pm25']) == [2.57, 2.82]
     assert df['time'].iloc[1] == pd.Timestamp('2026-09-20T01:00:00Z')
+
+
+class _Resp:
+    def __init__(self, status, payload=None):
+        self.status_code, self._payload = status, payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f'{self.status_code}')
+
+    def json(self):
+        return self._payload
+
+
+class _Session:
+    def __init__(self, statuses):
+        self.statuses, self.calls = list(statuses), 0
+
+    def get(self, url, params=None, timeout=None):
+        self.calls += 1
+        return _Resp(self.statuses.pop(0), {'ok': True})
+
+
+def test_flaky_requests_are_retried(monkeypatch):
+    monkeypatch.setattr(_http.time, 'sleep', lambda s: None)
+    s = _Session([400, 503, 200])
+    assert _http.get_json(s, 'https://example.org') == {'ok': True} and s.calls == 3
+
+
+def test_missing_pages_are_not_retried(monkeypatch):
+    monkeypatch.setattr(_http.time, 'sleep', lambda s: None)
+    s = _Session([404, 200])
+    with pytest.raises(requests.HTTPError):
+        _http.get_json(s, 'https://example.org')
+    assert s.calls == 1

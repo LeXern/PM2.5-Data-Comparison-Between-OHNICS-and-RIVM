@@ -20,6 +20,8 @@ from pathlib import Path
 import pandas as pd
 import requests
 
+from ._http import get_json
+
 ROOT = Path(__file__).resolve().parent.parent
 API = 'https://d.ohnics.online/m/{sensor}/{days}'
 FIELDS = {'P2': 'pm25', 'P1': 'pm1', 'T': 'temp_c', 'H': 'rh'}
@@ -51,9 +53,7 @@ def parse(records: list[dict]) -> pd.DataFrame:
 
 
 def fetch(sensor: str, days: int) -> pd.DataFrame:
-    r = requests.get(API.format(sensor=sensor, days=days), timeout=60)
-    r.raise_for_status()
-    return parse(r.json())
+    return parse(get_json(requests.Session(), API.format(sensor=sensor, days=days)))
 
 
 def main() -> None:
